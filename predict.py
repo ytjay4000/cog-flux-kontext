@@ -73,10 +73,8 @@ class FluxDevKontextPredictor(BasePredictor):
         self.model = torch.compile(self.model, mode="max-autotune")
         self.ae.decode = torch.compile(self.ae.decode, mode="max-autotune")
 
-        # Initialize NSFW classifier
-        self.nsfw_classifier = pipeline(
-            "image-classification", model="Falconsai/nsfw_image_detection", device=self.device
-        )
+        # Initialize safety checker
+        self.safety_checker = SafetyChecker()
 
         print("FluxDevKontextPredictor setup complete")
 
