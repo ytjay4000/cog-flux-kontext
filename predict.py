@@ -187,22 +187,20 @@ class FluxDevKontextPredictor(BasePredictor):
             return Path(output_path)
 
 
-def download_weights():
-    """Download all required weights if they don't exist"""
+def download_model_weights():
+    """Download all required model weights if they don't exist"""
     # Download kontext weights
     if not os.path.exists(KONTEXT_WEIGHTS_PATH):
-        print(f"Downloading kontext weights to {KONTEXT_WEIGHTS_PATH}")
-        os.makedirs(os.path.dirname(KONTEXT_WEIGHTS_PATH), exist_ok=True)
-        subprocess.check_call(["pget", "-f", KONTEXT_WEIGHTS_URL, KONTEXT_WEIGHTS_PATH])
+        print("Kontext weights not found, downloading...")
+        download_weights(KONTEXT_WEIGHTS_URL, Path(KONTEXT_WEIGHTS_PATH))
         print("Kontext weights downloaded successfully")
     else:
         print("Kontext weights already exist")
 
     # Download autoencoder weights
     if not os.path.exists(AE_WEIGHTS_PATH):
-        print(f"Downloading autoencoder weights to {AE_WEIGHTS_PATH}")
-        os.makedirs(os.path.dirname(AE_WEIGHTS_PATH), exist_ok=True)
-        subprocess.check_call(["pget", "-f", AE_WEIGHTS_URL, AE_WEIGHTS_PATH])
+        print("Autoencoder weights not found, downloading...")
+        download_weights(AE_WEIGHTS_URL, Path(AE_WEIGHTS_PATH))
         print("Autoencoder weights downloaded successfully")
     else:
         print("Autoencoder weights already exist")
