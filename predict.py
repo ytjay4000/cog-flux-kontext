@@ -194,9 +194,13 @@ class FluxDevKontextPredictor(BasePredictor):
             if output_format == "png":
                 image.save(output_path)
             elif output_format == "webp":
-                image.save(output_path, format="WEBP", quality=output_quality, optimize=True)
+                image.save(
+                    output_path, format="WEBP", quality=output_quality, optimize=True
+                )
             else:  # jpg
-                image.save(output_path, format="JPEG", quality=output_quality, optimize=True)
+                image.save(
+                    output_path, format="JPEG", quality=output_quality, optimize=True
+                )
 
             # Return the output path
             return Path(output_path)
@@ -261,6 +265,7 @@ def load_ae_local(device: str | torch.device = "cuda"):
         print(f"AE Unexpected keys: {unexpected}")
 
     return ae
+
 
 def prepare_seed(seed: int) -> int:
     if not seed:
