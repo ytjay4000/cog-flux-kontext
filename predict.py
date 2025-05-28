@@ -10,6 +10,7 @@ from flux.util import (
     load_t5,
 )
 from flux.model import Flux
+from flux.modules.autoencoder import AutoEncoder
 from safetensors.torch import load_file as load_sft
 from safety_checker import SafetyChecker
 from util import print_timing
@@ -223,8 +224,6 @@ def load_kontext_model(device: str | torch.device = "cuda"):
 
 def load_ae_local(device: str | torch.device = "cuda"):
     """Load autoencoder from local weights"""
-    from flux.modules.autoencoder import AutoEncoder
-
     config = configs["flux-dev"]
 
     print("Loading autoencoder...")
