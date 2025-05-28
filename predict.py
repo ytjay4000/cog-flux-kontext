@@ -28,8 +28,6 @@ AE_WEIGHTS_URL = (
 )
 AE_WEIGHTS_PATH = "/models/flux-dev/ae.safetensors"
 
-MAX_IMAGE_SIZE = 1440
-
 ASPECT_RATIOS = {
     "1:1": (1024, 1024),
     "16:9": (1344, 768),
