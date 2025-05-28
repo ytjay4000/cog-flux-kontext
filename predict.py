@@ -3,6 +3,7 @@ import time
 import os
 import sys
 import subprocess
+from typing import Tuple
 import torch
 from PIL import Image
 from cog import BasePredictor, Path, Input
