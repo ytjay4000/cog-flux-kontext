@@ -111,7 +111,6 @@ class FluxDevKontextPredictor(BasePredictor):
             description="Output image format", choices=["webp", "jpg", "png"], default="webp"
         ),
         disable_safety_checker: bool = Input(description="Disable NSFW safety checker", default=False),
-        nsfw_threshold: float = Input(description="NSFW detection threshold", default=0.85, ge=0.0, le=1.0),
     ) -> Path:
         """
         Generate an image based on the text prompt and conditioning image using FLUX.1 Kontext
