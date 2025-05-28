@@ -39,7 +39,7 @@ ASPECT_RATIOS = {
     "4:3": (1152, 896),
     "9:16": (768, 1344),
     "9:21": (640, 1536),
-    "MATCH_INPUT_IMAGE": (None, None),
+    "match_input_image": (None, None),
 }
 
 
@@ -86,14 +86,13 @@ class FluxDevKontextPredictor(BasePredictor):
     def predict(
         self,
         prompt: str = Input(
-            description="Text prompt describing the desired transformation",
-            default="replace the logo with the text 'Hello World'",
+            description="Text description of what you want to generate, or the instruction on how to edit the given image.",
         ),
         input_image: Path = Input(
-            description="Input image to condition the generation"
+            description="Image to use as reference. Must be jpeg, png, gif, or webp.",
         ),
         aspect_ratio: str = Input(
-            description="Aspect ratio for the generated image",
+            description="Aspect ratio of the generated image. Use 'match_input_image' to match the aspect ratio of the input image.",
             choices=list(ASPECT_RATIOS.keys()),
             default="1:1",
         ),
@@ -109,13 +108,19 @@ class FluxDevKontextPredictor(BasePredictor):
             description="Guidance scale for generation", default=2.5, ge=0.0, le=10.0
         ),
         seed: int = Input(
-            description="Random seed for reproducible generation. Use 0 for random seed.",
-            default=0,
+            description="Random seed for reproducible generation. Leave blank for random.",
+            default=None,
         ),
         output_format: str = Input(
             description="Output image format",
             choices=["webp", "jpg", "png"],
             default="webp",
+        ),
+        output_quality: int = Input(
+            description="Quality when saving the output images, from 0 to 100. 100 is best quality, 0 is lowest quality. Not relevant for .png outputs",
+            default=80,
+            ge=0,
+            le=100,
         ),
         disable_safety_checker: bool = Input(
             description="Disable NSFW safety checker", default=False
@@ -125,10 +130,7 @@ class FluxDevKontextPredictor(BasePredictor):
         Generate an image based on the text prompt and conditioning image using FLUX.1 Kontext
         """
         with torch.inference_mode(), print_timing("generate image"):
-            # Prepare seed
-            if seed == 0:
-                seed = int.from_bytes(os.urandom(2), "big")
-            print(f"Using seed: {seed}")
+            seed = prepare_seed(seed)
 
             # Prepare target dimensions from aspect ratio and megapixels
             target_width, target_height = self.size_from_aspect_megapixels(
@@ -192,9 +194,9 @@ class FluxDevKontextPredictor(BasePredictor):
             if output_format == "png":
                 image.save(output_path)
             elif output_format == "webp":
-                image.save(output_path, format="WEBP", quality=95, optimize=True)
+                image.save(output_path, format="WEBP", quality=output_quality, optimize=True)
             else:  # jpg
-                image.save(output_path, format="JPEG", quality=95, optimize=True)
+                image.save(output_path, format="JPEG", quality=output_quality, optimize=True)
 
             # Return the output path
             return Path(output_path)
@@ -259,3 +261,9 @@ def load_ae_local(device: str | torch.device = "cuda"):
         print(f"AE Unexpected keys: {unexpected}")
 
     return ae
+
+def prepare_seed(seed: int) -> int:
+    if not seed:
+        seed = int.from_bytes(os.urandom(2), "big")
+    print(f"Using seed: {seed}")
+    return seed
