@@ -59,7 +59,7 @@ class FluxDevKontextPredictor(BasePredictor):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Download all weights if needed
-        download_weights()
+        download_model_weights()
 
         # Initialize models
         self.t5 = load_t5(self.device, max_length=512)
