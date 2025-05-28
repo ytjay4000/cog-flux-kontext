@@ -244,8 +244,3 @@ def load_ae_local(device: str | torch.device = "cuda"):
         print(f"AE Unexpected keys: {unexpected}")
 
     return ae
-
-
-def make_multiple_of_16(n: int) -> int:
-    """Round number to nearest multiple of 16"""
-    return ((n + 15) // 16) * 16
