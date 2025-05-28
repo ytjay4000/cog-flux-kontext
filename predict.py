@@ -89,7 +89,7 @@ class FluxDevKontextPredictor(BasePredictor):
             description="Text prompt describing the desired transformation",
             default="replace the logo with the text 'Hello World'",
         ),
-        conditioning_image: Path = Input(description="Input image to condition the generation"),
+        input_image: Path = Input(description="Input image to condition the generation"),
         aspect_ratio: str = Input(
             description="Aspect ratio for the generated image",
             choices=list(ASPECT_RATIOS.keys()),
