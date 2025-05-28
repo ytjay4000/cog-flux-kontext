@@ -1,5 +1,3 @@
-from contextlib import contextmanager
-import time
 import os
 import sys
 import subprocess
@@ -19,6 +17,7 @@ from flux.model import Flux
 from safetensors.torch import load_file as load_sft
 from safety_checker import SafetyChecker
 from util import print_timing
+from weights import download_weights
 
 # Environment setup
 os.environ["TORCHINDUCTOR_CACHE_DIR"] = "/tmp/torch-inductor-cache-kontext"
@@ -256,13 +255,3 @@ def load_ae_local(device: str | torch.device = "cuda"):
 def make_multiple_of_16(n: int) -> int:
     """Round number to nearest multiple of 16"""
     return ((n + 15) // 16) * 16
-
-
-@contextmanager
-def print_timing(operation_name: str):
-    start_time = time.time()
-    try:
-        yield
-    finally:
-        elapsed_time = time.time() - start_time
-        print(f"{operation_name} took {elapsed_time:.2f} seconds")
