@@ -1,10 +1,7 @@
 import os
-import sys
-import subprocess
 import torch
 from PIL import Image
 from cog import BasePredictor, Path, Input
-from transformers import pipeline
 
 from flux.sampling import denoise, get_schedule, prepare_kontext, unpack
 from flux.util import (
