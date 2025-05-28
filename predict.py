@@ -75,13 +75,13 @@ class FluxDevKontextPredictor(BasePredictor):
         conditioning_image: Path = Input(description="Input image to condition the generation"),
         width: int = Input(
             description="Width of the generated image (will be rounded to nearest multiple of 16). Use 0 for auto-sizing based on conditioning image.",
-            default=0,
+            default=None,
             ge=0,
             le=MAX_IMAGE_SIZE,
         ),
         height: int = Input(
             description="Height of the generated image (will be rounded to nearest multiple of 16). Use 0 for auto-sizing based on conditioning image.",
-            default=0,
+            default=None,
             ge=0,
             le=MAX_IMAGE_SIZE,
         ),
