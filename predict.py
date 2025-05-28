@@ -124,9 +124,9 @@ class FluxDevKontextPredictor(BasePredictor):
                 seed = int.from_bytes(os.urandom(2), "big")
             print(f"Using seed: {seed}")
 
-            # Prepare target dimensions
-            target_width = width if width > 0 else None
-            target_height = height if height > 0 else None
+            # Prepare target dimensions from aspect ratio and megapixels
+            target_width, target_height = self.size_from_aspect_megapixels(aspect_ratio, megapixels)
+            print(f"Target dimensions: {target_width}x{target_height}")
 
             # Prepare input for kontext sampling
             print("Preparing input...")
