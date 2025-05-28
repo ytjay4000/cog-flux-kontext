@@ -62,9 +62,9 @@ class FluxDevKontextPredictor(BasePredictor):
         self.ae = load_ae_local(device=self.device)
 
         # Compile models for faster execution
-        print("Compiling models with torch.compile...")
-        self.model = torch.compile(self.model, mode="max-autotune")
-        self.ae.decode = torch.compile(self.ae.decode, mode="max-autotune")
+        # print("Compiling models with torch.compile...")
+        # self.model = torch.compile(self.model, mode="max-autotune")
+        # self.ae.decode = torch.compile(self.ae.decode, mode="max-autotune")
 
         # Initialize safety checker
         self.safety_checker = SafetyChecker()
