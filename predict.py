@@ -76,6 +76,9 @@ class FluxDevKontextPredictor(BasePredictor):
     def size_from_aspect_megapixels(self, aspect_ratio: str, megapixels: str = "1") -> tuple[int, int]:
         """Convert aspect ratio and megapixels to width and height"""
         width, height = ASPECT_RATIOS[aspect_ratio]
+        if width is None or height is None:
+            # For match_input_image, return None values
+            return (None, None)
         if megapixels == "0.25":
             width, height = width // 2, height // 2
         return (width, height)
