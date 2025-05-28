@@ -130,7 +130,7 @@ class FluxDevKontextPredictor(BasePredictor):
                     clip=self.clip,
                     prompt=prompt,
                     ae=self.ae,
-                    img_cond_path=str(conditioning_image),
+                    img_cond_path=str(input_image),
                     target_width=target_width,
                     target_height=target_height,
                     bs=1,
