@@ -87,17 +87,15 @@ class FluxDevKontextPredictor(BasePredictor):
             default="replace the logo with the text 'Hello World'",
         ),
         conditioning_image: Path = Input(description="Input image to condition the generation"),
-        width: int = Input(
-            description="Width of the generated image (will be rounded to nearest multiple of 16). Use 0 for auto-sizing based on conditioning image.",
-            default=None,
-            ge=0,
-            le=MAX_IMAGE_SIZE,
+        aspect_ratio: str = Input(
+            description="Aspect ratio for the generated image",
+            choices=list(ASPECT_RATIOS.keys()),
+            default="1:1",
         ),
-        height: int = Input(
-            description="Height of the generated image (will be rounded to nearest multiple of 16). Use 0 for auto-sizing based on conditioning image.",
-            default=None,
-            ge=0,
-            le=MAX_IMAGE_SIZE,
+        megapixels: str = Input(
+            description="Approximate number of megapixels for generated image",
+            choices=["1", "0.25"],
+            default="1",
         ),
         num_inference_steps: int = Input(description="Number of inference steps", default=30, ge=4, le=50),
         guidance: float = Input(description="Guidance scale for generation", default=2.5, ge=0.0, le=10.0),
