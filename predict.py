@@ -3,7 +3,6 @@ import time
 import os
 import sys
 import subprocess
-from typing import Tuple
 import torch
 from PIL import Image
 from cog import BasePredictor, Path, Input
@@ -12,11 +11,9 @@ from transformers import pipeline
 from flux.sampling import denoise, get_schedule, prepare_kontext, unpack
 from flux.util import (
     configs,
-    load_ae,
     load_clip,
     load_t5,
     save_image,
-    PREFERED_KONTEXT_RESOLUTIONS,
 )
 from flux.model import Flux
 from safetensors.torch import load_file as load_sft
@@ -81,7 +78,7 @@ class FluxDevKontextPredictor(BasePredictor):
 
         print("FluxDevKontextPredictor setup complete")
 
-    def size_from_aspect_megapixels(self, aspect_ratio: str, megapixels: str = "1") -> Tuple[int, int]:
+    def size_from_aspect_megapixels(self, aspect_ratio: str, megapixels: str = "1") -> tuple[int, int]:
         """Convert aspect ratio and megapixels to width and height"""
         width, height = ASPECT_RATIOS[aspect_ratio]
         if megapixels == "0.25":
@@ -204,8 +201,6 @@ def download_weights():
 
 def load_kontext_model(device: str | torch.device = "cuda"):
     """Load the kontext model with complete transformer weights"""
-    from flux.model import Flux
-
     # Use flux-dev config as base for kontext model
     config = configs["flux-dev"]
 
