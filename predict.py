@@ -160,18 +160,29 @@ class FluxDevKontextPredictor(BasePredictor):
             with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16):
                 x = self.ae.decode(x)
 
+            # Convert tensor to PIL Image
+            x = x.clamp(-1, 1)
+            x = (x + 1) / 2
+            x = x.permute(0, 2, 3, 1).cpu().numpy()
+            x = (x * 255).astype("uint8")
+            image = Image.fromarray(x[0])
+
+            # Apply safety checking
+            if not disable_safety_checker:
+                with print_timing("Running safety checker"):
+                    images = self.safety_checker.filter_images([image])
+                    if not images:
+                        raise Exception("Generated image contained NSFW content. Try running it again with a different prompt.")
+                    image = images[0]
+
             # Save image
             output_path = f"output.{output_format}"
-            idx = save_image(
-                nsfw_classifier=self.nsfw_classifier,
-                name="flux-kontext",
-                output_name=output_path,
-                idx=0,
-                x=x,
-                add_sampling_metadata=True,
-                prompt=prompt,
-                nsfw_threshold=nsfw_threshold if not disable_safety_checker else 0.0,
-            )
+            if output_format == "png":
+                image.save(output_path)
+            elif output_format == "webp":
+                image.save(output_path, format="WEBP", quality=95, optimize=True)
+            else:  # jpg
+                image.save(output_path, format="JPEG", quality=95, optimize=True)
 
             # Return the output path
             return Path(output_path)
