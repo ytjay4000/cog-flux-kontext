@@ -10,6 +10,7 @@ def print_timing(operation_name: str):
     """
     start_time = time.time()
     try:
+        print(f"Starting {operation_name}")
         yield
     finally:
         elapsed_time = time.time() - start_time

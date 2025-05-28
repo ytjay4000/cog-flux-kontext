@@ -119,19 +119,19 @@ class FluxDevKontextPredictor(BasePredictor):
             print(f"Target dimensions: {target_width}x{target_height}")
 
             # Prepare input for kontext sampling
-            print("Preparing input...")
-            inp, final_height, final_width = prepare_kontext(
-                t5=self.t5,
-                clip=self.clip,
-                prompt=prompt,
-                ae=self.ae,
-                img_cond_path=str(conditioning_image),
-                target_width=target_width,
-                target_height=target_height,
-                bs=1,
-                seed=seed,
-                device=self.device,
-            )
+            with print_timing("prepare input"):
+                inp, final_height, final_width = prepare_kontext(
+                    t5=self.t5,
+                    clip=self.clip,
+                    prompt=prompt,
+                    ae=self.ae,
+                    img_cond_path=str(conditioning_image),
+                    target_width=target_width,
+                    target_height=target_height,
+                    bs=1,
+                    seed=seed,
+                    device=self.device,
+                )
 
             # Remove the original conditioning image from memory to save space
             inp.pop("img_cond_orig", None)
@@ -144,21 +144,20 @@ class FluxDevKontextPredictor(BasePredictor):
             )
 
             # Generate image
-            print("Generating image...")
-            x = denoise(self.model, **inp, timesteps=timesteps, guidance=guidance)
+            with print_timing("denoise"):
+                x = denoise(self.model, **inp, timesteps=timesteps, guidance=guidance)
 
             # Decode latents to pixel space
-            print("Decoding image...")
-            x = unpack(x.float(), final_height, final_width)
-            with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16):
-                x = self.ae.decode(x)
+            with print_timing("decode"):
+                x = unpack(x.float(), final_height, final_width)
+                with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16):
+                    x = self.ae.decode(x)
 
-            # Convert tensor to PIL Image
-            x = x.clamp(-1, 1)
-            x = (x + 1) / 2
-            x = x.permute(0, 2, 3, 1).cpu().numpy()
-            x = (x * 255).astype("uint8")
-            image = Image.fromarray(x[0])
+            with print_timing("convert to image"):
+                x = x.clamp(-1, 1)
+                x = (x + 1) / 2
+                x = (x.permute(0, 2, 3, 1) * 255).to(torch.uint8).cpu().numpy()
+                image = Image.fromarray(x[0])
 
             # Apply safety checking
             if not disable_safety_checker:
