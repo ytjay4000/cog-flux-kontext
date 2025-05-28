@@ -8,7 +8,6 @@ from flux.util import (
     configs,
     load_clip,
     load_t5,
-    save_image,
 )
 from flux.model import Flux
 from safetensors.torch import load_file as load_sft
