@@ -24,9 +24,7 @@ KONTEXT_WEIGHTS_URL = "https://weights.replicate.delivery/default/black-forest-l
 KONTEXT_WEIGHTS_PATH = "/models/kontext/preliminary-dev-kontext.sft"
 
 # Model weights URLs
-AE_WEIGHTS_URL = (
-    "https://weights.replicate.delivery/default/black-forest-labs/FLUX.1-dev/safetensors/ae.safetensors"
-)
+AE_WEIGHTS_URL = "https://weights.replicate.delivery/default/black-forest-labs/FLUX.1-dev/safetensors/ae.safetensors"
 AE_WEIGHTS_PATH = "/models/flux-dev/ae.safetensors"
 
 ASPECT_RATIOS = {
@@ -41,7 +39,7 @@ ASPECT_RATIOS = {
     "4:3": (1152, 896),
     "9:16": (768, 1344),
     "9:21": (640, 1536),
-    "MATCH_INPUT_IMAGE": (NONE, NONE),
+    "MATCH_INPUT_IMAGE": (None, None),
 }
 
 
@@ -73,7 +71,9 @@ class FluxDevKontextPredictor(BasePredictor):
 
         print("FluxDevKontextPredictor setup complete")
 
-    def size_from_aspect_megapixels(self, aspect_ratio: str, megapixels: str = "1") -> tuple[int, int]:
+    def size_from_aspect_megapixels(
+        self, aspect_ratio: str, megapixels: str = "1"
+    ) -> tuple[int | None, int | None]:
         """Convert aspect ratio and megapixels to width and height"""
         width, height = ASPECT_RATIOS[aspect_ratio]
         if width is None or height is None:
@@ -89,7 +89,9 @@ class FluxDevKontextPredictor(BasePredictor):
             description="Text prompt describing the desired transformation",
             default="replace the logo with the text 'Hello World'",
         ),
-        input_image: Path = Input(description="Input image to condition the generation"),
+        input_image: Path = Input(
+            description="Input image to condition the generation"
+        ),
         aspect_ratio: str = Input(
             description="Aspect ratio for the generated image",
             choices=list(ASPECT_RATIOS.keys()),
@@ -100,27 +102,38 @@ class FluxDevKontextPredictor(BasePredictor):
             choices=["1", "0.25"],
             default="1",
         ),
-        num_inference_steps: int = Input(description="Number of inference steps", default=30, ge=4, le=50),
-        guidance: float = Input(description="Guidance scale for generation", default=2.5, ge=0.0, le=10.0),
+        num_inference_steps: int = Input(
+            description="Number of inference steps", default=30, ge=4, le=50
+        ),
+        guidance: float = Input(
+            description="Guidance scale for generation", default=2.5, ge=0.0, le=10.0
+        ),
         seed: int = Input(
-            description="Random seed for reproducible generation. Use 0 for random seed.", default=0
+            description="Random seed for reproducible generation. Use 0 for random seed.",
+            default=0,
         ),
         output_format: str = Input(
-            description="Output image format", choices=["webp", "jpg", "png"], default="webp"
+            description="Output image format",
+            choices=["webp", "jpg", "png"],
+            default="webp",
         ),
-        disable_safety_checker: bool = Input(description="Disable NSFW safety checker", default=False),
+        disable_safety_checker: bool = Input(
+            description="Disable NSFW safety checker", default=False
+        ),
     ) -> Path:
         """
         Generate an image based on the text prompt and conditioning image using FLUX.1 Kontext
         """
-        with (torch.inference_mode(), print_timing("generate image")):
+        with torch.inference_mode(), print_timing("generate image"):
             # Prepare seed
             if seed == 0:
                 seed = int.from_bytes(os.urandom(2), "big")
             print(f"Using seed: {seed}")
 
             # Prepare target dimensions from aspect ratio and megapixels
-            target_width, target_height = self.size_from_aspect_megapixels(aspect_ratio, megapixels)
+            target_width, target_height = self.size_from_aspect_megapixels(
+                aspect_ratio, megapixels
+            )
             print(f"Target dimensions: {target_width}x{target_height}")
 
             # Prepare input for kontext sampling
@@ -169,7 +182,9 @@ class FluxDevKontextPredictor(BasePredictor):
                 with print_timing("Running safety checker"):
                     images = self.safety_checker.filter_images([image])
                     if not images:
-                        raise Exception("Generated image contained NSFW content. Try running it again with a different prompt.")
+                        raise Exception(
+                            "Generated image contained NSFW content. Try running it again with a different prompt."
+                        )
                     image = images[0]
 
             # Save image
