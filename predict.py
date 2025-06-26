@@ -2,6 +2,7 @@ import os
 import torch
 from PIL import Image
 from cog import BasePredictor, Path, Input
+import shutil
 
 from flux.sampling import denoise, get_schedule, prepare_kontext, unpack
 from flux.util import (
@@ -18,8 +19,10 @@ from weights import download_weights
 
 from flux.util import ASPECT_RATIOS
 
+from torch._inductor.fx_passes import post_grad
+
 # Kontext model configuration
-KONTEXT_WEIGHTS_URL = "https://weights.replicate.delivery/default/black-forest-labs/kontext/pre-release/preliminary-dev-kontext.sft"
+KONTEXT_WEIGHTS_URL = "https://weights.replicate.delivery/default/black-forest-labs/kontext/release-candidate/kontext-dev.sft"
 KONTEXT_WEIGHTS_PATH = "/models/kontext/kontext-dev.sft"
 
 # Model weights URLs
@@ -45,23 +48,7 @@ class FluxDevKontextPredictor(BasePredictor):
         self.clip = load_clip(self.device)
         self.model = load_kontext_model(device=self.device)
         self.ae = load_ae_local(device=self.device)
-        
-        # load the torch compile cache
-        # if os.path.exists(TORCH_COMPILE_CACHE):
-        #     print(f"Loading torch compile cache from {TORCH_COMPILE_CACHE}")
-        #     with open(TORCH_COMPILE_CACHE, "rb") as f:
-        #         artifact_bytes = f.read()
-        #         info = torch.compiler.load_cache_artifacts(artifact_bytes)
-        # else:
-        #     print(f"WARNING:Torch compile cache not found at {TORCH_COMPILE_CACHE}, setup may take a while")
-
         self.model = torch.compile(self.model, dynamic=True)
-
-        # for (h,w) in ASPECT_RATIOS.values():
-        #     if (h,w) == (None, None):
-        #         continue
-        #     with print_timing(f"warm up model for aspect ratio {h}x{w}"):
-        #         warm_up_model(h, w, self.model, self.device)
 
         # Initialize safety checker
         self.safety_checker = SafetyChecker()
@@ -118,9 +105,9 @@ class FluxDevKontextPredictor(BasePredictor):
             seed = prepare_seed(seed)
 
             if aspect_ratio == "match_input_image":
-                target_height, target_width = None, None
+                target_width, target_height = None, None
             else:
-                target_height, target_width = ASPECT_RATIOS[aspect_ratio]
+                target_width, target_height = ASPECT_RATIOS[aspect_ratio]
 
             # Prepare input for kontext sampling
             with print_timing("prepare input"):
