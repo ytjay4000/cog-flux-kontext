@@ -10,7 +10,7 @@ from torch import Tensor
 from .model import Flux
 from .modules.autoencoder import AutoEncoder
 from .modules.conditioner import HFEmbedder
-from .modules.image_embedders import CannyImageEncoder, DepthImageEncoder, ReduxImageEncoder
+from .modules.image_embedders import DepthImageEncoder, ReduxImageEncoder
 from .util import PREFERED_KONTEXT_RESOLUTIONS
 
 
@@ -28,10 +28,9 @@ def get_noise(
         # allow for packing
         2 * math.ceil(height / 16),
         2 * math.ceil(width / 16),
-        device=device,
         dtype=dtype,
-        generator=torch.Generator(device=device).manual_seed(seed),
-    )
+        generator=torch.Generator(device="cpu").manual_seed(seed),
+    ).to(device)
 
 
 def prepare(t5: HFEmbedder, clip: HFEmbedder, img: Tensor, prompt: str | list[str]) -> dict[str, Tensor]:
@@ -74,7 +73,7 @@ def prepare_control(
     img: Tensor,
     prompt: str | list[str],
     ae: AutoEncoder,
-    encoder: DepthImageEncoder | CannyImageEncoder,
+    encoder: DepthImageEncoder,
     img_cond_path: str,
 ) -> dict[str, Tensor]:
     # load and encode the conditioning image

@@ -6,12 +6,12 @@ from glob import iglob
 
 import torch
 from fire import Fire
-from transformers import pipeline
 
+from flux.content_filters import PixtralContentFilter
 from flux.sampling import denoise, get_schedule, prepare_kontext, unpack
 from flux.util import (
     aspect_ratio_to_height_width,
-    configs,
+    check_onnx_access_for_trt,
     load_ae,
     load_clip,
     load_flow_model,
@@ -68,7 +68,7 @@ def parse_prompt(options: SamplingOptions) -> SamplingOptions | None:
             if options.height is not None and options.width is not None:
                 print(
                     f"Setting resolution to {options.width} x {options.height} "
-                    f"({options.height *options.width/1e6:.2f}MP)"
+                    f"({options.height * options.width / 1e6:.2f}MP)"
                 )
             else:
                 print(f"Setting resolution to {options.width} x {options.height}.")
@@ -148,10 +148,10 @@ def parse_img_cond_path(options: SamplingOptions | None) -> SamplingOptions | No
 
 @torch.inference_mode()
 def main(
-    name: str = "flux-dev",
+    name: str = "flux-dev-kontext",
     aspect_ratio: str | None = None,
     seed: int | None = None,
-    prompt: str = "replace the logo with the text 'Hello World'",
+    prompt: str = "replace the logo with the text 'Black Forest Labs'",
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
     num_steps: int = 30,
     loop: bool = False,
@@ -160,7 +160,9 @@ def main(
     output_dir: str = "output",
     add_sampling_metadata: bool = True,
     img_cond_path: str = "assets/cup.png",
-    **kwargs: dict | None,
+    trt: bool = False,
+    trt_transformer_precision: str = "bf16",
+    track_usage: bool = False,
 ):
     """
     Sample the flux model. Either interactively (set `--loop`) or run for a
@@ -182,14 +184,9 @@ def main(
         add_sampling_metadata: Add the prompt to the image Exif metadata
         img_cond_path: path to conditioning image (jpeg/png/webp)
         trt: use TensorRT backend for optimized inference
+        track_usage: track usage of the model for licensing purposes
     """
-    assert name == "flux-dev", f"Got unknown model name: {name}"
-
-    nsfw_classifier = pipeline("image-classification", model="Falconsai/nsfw_image_detection", device=device)
-
-    if name not in configs:
-        available = ", ".join(configs.keys())
-        raise ValueError(f"Got unknown model name: {name}, chose from {available}")
+    assert name == "flux-dev-kontext", f"Got unknown model name: {name}"
 
     torch_device = torch.device(device)
 
@@ -210,11 +207,44 @@ def main(
     else:
         width, height = aspect_ratio_to_height_width(aspect_ratio)
 
-    # init all components
-    t5 = load_t5(torch_device, max_length=512)
-    clip = load_clip(torch_device)
-    model = load_flow_model(name, device="cpu" if offload else torch_device)
+    if not trt:
+        t5 = load_t5(torch_device, max_length=512)
+        clip = load_clip(torch_device)
+        model = load_flow_model(name, device="cpu" if offload else torch_device)
+    else:
+        # lazy import to make install optional
+        from flux.trt.trt_manager import ModuleName, TRTManager
+
+        # Check if we need ONNX model access (which requires authentication for FLUX models)
+        onnx_dir = check_onnx_access_for_trt(name, trt_transformer_precision)
+
+        trt_ctx_manager = TRTManager(
+            trt_transformer_precision=trt_transformer_precision,
+            trt_t5_precision=os.environ.get("TRT_T5_PRECISION", "bf16"),
+        )
+        engines = trt_ctx_manager.load_engines(
+            model_name=name,
+            module_names={
+                ModuleName.CLIP,
+                ModuleName.TRANSFORMER,
+                ModuleName.T5,
+            },
+            engine_dir=os.environ.get("TRT_ENGINE_DIR", "./engines"),
+            custom_onnx_paths=onnx_dir or os.environ.get("CUSTOM_ONNX_PATHS", ""),
+            trt_image_height=height,
+            trt_image_width=width,
+            trt_batch_size=1,
+            trt_timing_cache=os.getenv("TRT_TIMING_CACHE_FILE", None),
+            trt_static_batch=False,
+            trt_static_shape=False,
+        )
+
+        model = engines[ModuleName.TRANSFORMER].to(device="cpu" if offload else torch_device)
+        clip = engines[ModuleName.CLIP].to(torch_device)
+        t5 = engines[ModuleName.T5].to(device="cpu" if offload else torch_device)
+
     ae = load_ae(name, device="cpu" if offload else torch_device)
+    content_filter = PixtralContentFilter(torch.device("cpu"))
 
     rng = torch.Generator(device="cpu")
     opts = SamplingOptions(
@@ -236,6 +266,25 @@ def main(
             opts.seed = rng.seed()
         print(f"Generating with seed {opts.seed}:\n{opts.prompt}")
         t0 = time.perf_counter()
+
+        if content_filter.test_txt(opts.prompt):
+            print("Your prompt has been automatically flagged. Please choose another prompt.")
+            if loop:
+                print("-" * 80)
+                opts = parse_prompt(opts)
+                opts = parse_img_cond_path(opts)
+            else:
+                opts = None
+            continue
+        if content_filter.test_image(opts.img_cond_path):
+            print("Your input image has been automatically flagged. Please choose another image.")
+            if loop:
+                print("-" * 80)
+                opts = parse_prompt(opts)
+                opts = parse_img_cond_path(opts)
+            else:
+                opts = None
+            continue
 
         if offload:
             t5, clip, ae = t5.to(torch_device), clip.to(torch_device), ae.to(torch_device)
@@ -265,7 +314,11 @@ def main(
             model = model.to(torch_device)
 
         # denoise initial noise
+        t00 = time.time()
         x = denoise(model, **inp, timesteps=timesteps, guidance=opts.guidance)
+        torch.cuda.synchronize()
+        t01 = time.time()
+        print(f"Denoising took {t01 - t00:.3f}s")
 
         # offload model, load autoencoder to gpu
         if offload:
@@ -276,14 +329,32 @@ def main(
         # decode latents to pixel space
         x = unpack(x.float(), height, width)
         with torch.autocast(device_type=torch_device.type, dtype=torch.bfloat16):
+            ae_dev_t0 = time.perf_counter()
             x = ae.decode(x)
+            torch.cuda.synchronize()
+            ae_dev_t1 = time.perf_counter()
+            print(f"AE decode took {ae_dev_t1 - ae_dev_t0:.3f}s")
+
+        if content_filter.test_image(x.cpu()):
+            print(
+                "Your output image has been automatically flagged. Choose another prompt/image or try again."
+            )
+            if loop:
+                print("-" * 80)
+                opts = parse_prompt(opts)
+                opts = parse_img_cond_path(opts)
+            else:
+                opts = None
+            continue
 
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         t1 = time.perf_counter()
         print(f"Done in {t1 - t0:.1f}s")
 
-        idx = save_image(nsfw_classifier, name, output_name, idx, x, add_sampling_metadata, prompt)
+        idx = save_image(
+            None, name, output_name, idx, x, add_sampling_metadata, prompt, track_usage=track_usage
+        )
 
         if loop:
             print("-" * 80)
@@ -293,9 +364,5 @@ def main(
             opts = None
 
 
-def app():
-    Fire(main)
-
-
 if __name__ == "__main__":
-    app()
+    Fire(main)

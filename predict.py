@@ -2,46 +2,34 @@ import os
 import torch
 from PIL import Image
 from cog import BasePredictor, Path, Input
+import shutil
 
 from flux.sampling import denoise, get_schedule, prepare_kontext, unpack
 from flux.util import (
     configs,
     load_clip,
-    load_t5,
+    load_t5
 )
 from flux.model import Flux
 from flux.modules.autoencoder import AutoEncoder
 from safetensors.torch import load_file as load_sft
 from safety_checker import SafetyChecker
-from util import print_timing
+from util import print_timing, warm_up_model
 from weights import download_weights
 
-# Environment setup
-os.environ["TORCHINDUCTOR_CACHE_DIR"] = "/tmp/torch-inductor-cache-kontext"
+from flux.util import ASPECT_RATIOS
+
+from torch._inductor.fx_passes import post_grad
 
 # Kontext model configuration
-KONTEXT_WEIGHTS_URL = "https://weights.replicate.delivery/default/black-forest-labs/kontext/pre-release/preliminary-dev-kontext.sft"
-KONTEXT_WEIGHTS_PATH = "/models/kontext/preliminary-dev-kontext.sft"
+KONTEXT_WEIGHTS_URL = "https://weights.replicate.delivery/default/black-forest-labs/kontext/release-candidate/kontext-dev.sft"
+KONTEXT_WEIGHTS_PATH = "/models/kontext/kontext-dev.sft"
 
 # Model weights URLs
 AE_WEIGHTS_URL = "https://weights.replicate.delivery/default/black-forest-labs/FLUX.1-dev/safetensors/ae.safetensors"
 AE_WEIGHTS_PATH = "/models/flux-dev/ae.safetensors"
 
-ASPECT_RATIOS = {
-    "1:1": (1024, 1024),
-    "16:9": (1344, 768),
-    "21:9": (1536, 640),
-    "3:2": (1216, 832),
-    "2:3": (832, 1216),
-    "4:5": (896, 1088),
-    "5:4": (1088, 896),
-    "3:4": (896, 1152),
-    "4:3": (1152, 896),
-    "9:16": (768, 1344),
-    "9:21": (640, 1536),
-    "match_input_image": (None, None),
-}
-
+TORCH_COMPILE_CACHE = "./torch-compile-cache-flux-dev-kontext.bin"
 
 class FluxDevKontextPredictor(BasePredictor):
     """
@@ -50,7 +38,7 @@ class FluxDevKontextPredictor(BasePredictor):
 
     def setup(self) -> None:
         """Load model weights and initialize the pipeline"""
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda")
 
         # Download all weights if needed
         download_model_weights()
@@ -60,28 +48,12 @@ class FluxDevKontextPredictor(BasePredictor):
         self.clip = load_clip(self.device)
         self.model = load_kontext_model(device=self.device)
         self.ae = load_ae_local(device=self.device)
-
-        # Compile models for faster execution
-        # print("Compiling models with torch.compile...")
-        # self.model = torch.compile(self.model, mode="max-autotune")
-        # self.ae.decode = torch.compile(self.ae.decode, mode="max-autotune")
+        self.model = torch.compile(self.model, dynamic=True)
 
         # Initialize safety checker
         self.safety_checker = SafetyChecker()
-
         print("FluxDevKontextPredictor setup complete")
 
-    def size_from_aspect_megapixels(
-        self, aspect_ratio: str, megapixels: str = "1"
-    ) -> tuple[int | None, int | None]:
-        """Convert aspect ratio and megapixels to width and height"""
-        width, height = ASPECT_RATIOS[aspect_ratio]
-        if width is None or height is None:
-            # For match_input_image, return None values
-            return (None, None)
-        if megapixels == "0.25":
-            width, height = width // 2, height // 2
-        return (width, height)
 
     def predict(
         self,
@@ -94,13 +66,13 @@ class FluxDevKontextPredictor(BasePredictor):
         aspect_ratio: str = Input(
             description="Aspect ratio of the generated image. Use 'match_input_image' to match the aspect ratio of the input image.",
             choices=list(ASPECT_RATIOS.keys()),
-            default="1:1",
+            default="match_input_image",
         ),
-        megapixels: str = Input(
-            description="Approximate number of megapixels for generated image",
-            choices=["1", "0.25"],
-            default="1",
-        ),
+        # megapixels: str = Input(
+        #     description="Approximate number of megapixels for generated image",
+        #     choices=["1", "0.25"],
+        #     default="1",
+        # ),
         num_inference_steps: int = Input(
             description="Number of inference steps", default=30, ge=4, le=50
         ),
@@ -132,11 +104,10 @@ class FluxDevKontextPredictor(BasePredictor):
         with torch.inference_mode(), print_timing("generate image"):
             seed = prepare_seed(seed)
 
-            # Prepare target dimensions from aspect ratio and megapixels
-            target_width, target_height = self.size_from_aspect_megapixels(
-                aspect_ratio, megapixels
-            )
-            print(f"Target dimensions: {target_width}x{target_height}")
+            if aspect_ratio == "match_input_image":
+                target_width, target_height = None, None
+            else:
+                target_width, target_height = ASPECT_RATIOS[aspect_ratio]
 
             # Prepare input for kontext sampling
             with print_timing("prepare input"):
