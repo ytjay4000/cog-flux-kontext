@@ -55,10 +55,10 @@ jobs:
         echo "=== Pushing $model"
         echo "==="
         echo "==="
-        cog-safe-push --config cog-safe-push-configs/$model.yaml -vv ${{ inputs.ignore_schema_checks && '--ignore-schema-compatibility' || '' }} --overwrite
+        cog-safe-push --config cog-safe-push-configs/$model.yaml -vv ${{ inputs.ignore_schema_checks && '--ignore-schema-compatibility' || '' }}
         echo "==="
         echo "==="
         echo "=== Pushing underlying official model $model"
         echo "==="
         echo "==="
-        cog-safe-push --push-official-model --config cog-safe-push-configs/$model.yaml -vv ${{ inputs.ignore_schema_checks && '--ignore-schema-compatibility' || '' }} --overwrite
+        cog-safe-push --push-official-model --config cog-safe-push-configs/$model.yaml -vv ${{ inputs.ignore_schema_checks && '--ignore-schema-compatibility' || '' }}
