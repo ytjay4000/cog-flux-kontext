@@ -2,7 +2,7 @@ official_model: black-forest-labs/flux-kontext-dev
 model: replicate/flux-kontext-dev-internal
 test_model: replicate/test-flux-kontext-dev
 deployment:
-  name: flux-kontext-dev
+  name: flux-kontext-dev-internal
   owner: replicate
   hardware: h100
 predict:
