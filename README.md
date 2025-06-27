@@ -1,43 +1,22 @@
-# cog-flux-kontext
+# FLUX.1 Kontext (Cog inference)
 
-This is a [Cog](https://cog.run) inference model for FLUX.1 kontext [dev] by [Black Forest Labs](https://blackforestlabs.ai/). It powers the following Replicate model:
+Compact Cog wrapper around Black Forest Labs' FLUX.1 *Kontext* dev model.  It loads the
+Transformer, auto-encoder, CLIP/T5 text encoders, and optional NSFW safety checker,
+then exposes a single `predict` endpoint that performs image-to-image editing or
+style transfer conditioned on a text prompt.
 
-* https://replicate.com/black-forest-labs/flux-kontext-dev
-
-## Features
-
-* Compilation with `torch.compile`
-* NSFW checking with [CompVis](https://huggingface.co/CompVis/stable-diffusion-safety-checker) and [Falcons.ai](https://huggingface.co/Falconsai/nsfw_image_detection) safety checkers
-
-## Getting started
-
-If you just want to use the models, you can run [FLUX.1 kontext [dev]](https://replicate.com/black-forest-labs/flux-kontext-dev) on Replicate with an API or in the browser.
-
-The code in this repo can be used as a template for customizations on FLUX.1 kontext [dev], or to run the models on your own hardware.
-
-You can run a single prediction on the model using:
-
-```shell
-cog predict -i prompt="make the hair green" -i input_image=@lady.png
+```bash
+# basic usage
+cog predict -i prompt="make the hair blue" -i input_image=@lady.png
 ```
 
-The [Cog getting started guide](https://cog.run/getting-started/) explains what Cog is and how it works.
+Everything required (weights download, Torch 2 compilation, etc.) happens
+automatically on first run.
 
-To deploy it to Replicate, run:
+Licensed under Apache-2.0 for the wrapper code; see model card for FLUX.1 license.
 
-```shell
-cog login
-cog push r8.im/<your-username>/<your-model-name>
-```
-
-Learn more on [the deploy a custom model guide in the Replicate documentation](https://replicate.com/docs/guides/deploy-a-custom-model).
-
-## Contributing
-
-Pull requests and issues are welcome! If you see a novel technique or feature you think will make FLUX.1 inference better or faster, let us know and we'll do our best to integrate it.
-
-## License
-
-The code in this repository is licensed under the [Apache-2.0 License](LICENSE).
-
-FLUX.1 kontext [dev] falls under the [`FLUX.1 [dev]` Non-Commercial License](https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev/blob/main/LICENSE.md).
+### Performance Optimizations
+- `torch.compile` is used in dynamic mode
+- the two linear layers in the single stream block are quantized to run in FP8, using a modified version of aredden's [fp8 linear layer](https://github.com/aredden/flux-fp8-api/blob/main/float8_quantize.py)
+- [taylor seer](https://arxiv.org/abs/2503.06923) style activation caching, enabled by the `go_fast` option in the cog predictor. May cause quality degradation for more complex editing tasks.
+- enable pytorch's cudnn attention backend
