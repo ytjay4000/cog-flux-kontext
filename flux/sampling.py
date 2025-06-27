@@ -12,6 +12,7 @@ from .modules.autoencoder import AutoEncoder
 from .modules.conditioner import HFEmbedder
 from .modules.image_embedders import DepthImageEncoder, ReduxImageEncoder
 from .util import PREFERED_KONTEXT_RESOLUTIONS
+from .taylor_seer_utils import approximate_derivative, approximate_value
 
 
 def get_noise(
@@ -321,10 +322,29 @@ def denoise(
     # extra img tokens (sequence-wise)
     img_cond_seq: Tensor | None = None,
     img_cond_seq_ids: Tensor | None = None,
+    compute_step_map: list[bool] | None = None,
+    n_derivatives: int = 1,
 ):
+
     # this is ignored for schnell
+    num_steps = len(timesteps) - 1
+    if compute_step_map is None:
+        compute_step_map = [True] * num_steps
+    else:
+        assert len(compute_step_map) == num_steps, "compute_step_map must be the same length as timesteps"
+    
+
+    order = n_derivatives + 1
+    taylor_seer_state = {
+        "dY_prev": [None] * order,
+        "dY_current": [None] * order,
+        "last_non_approximated_step": 0,
+        "current_step": 0,
+    }
+
     guidance_vec = torch.full((img.shape[0],), guidance, device=img.device, dtype=img.dtype)
-    for t_curr, t_prev in zip(timesteps[:-1], timesteps[1:]):
+    for current_step, (t_curr, t_prev) in enumerate(zip(timesteps[:-1], timesteps[1:])):
+        
         t_vec = torch.full((img.shape[0],), t_curr, dtype=img.dtype, device=img.device)
         img_input = img
         img_input_ids = img_ids
@@ -336,15 +356,26 @@ def denoise(
             ), "You need to provide either both or neither of the sequence conditioning"
             img_input = torch.cat((img_input, img_cond_seq), dim=1)
             img_input_ids = torch.cat((img_input_ids, img_cond_seq_ids), dim=1)
-        pred = model(
-            img=img_input,
-            img_ids=img_input_ids,
-            txt=txt,
-            txt_ids=txt_ids,
-            y=vec,
-            timesteps=t_vec,
-            guidance=guidance_vec,
-        )
+        
+        if compute_step_map[current_step]:
+            pred = model(
+                img=img_input,
+                img_ids=img_input_ids,
+                txt=txt,
+                txt_ids=txt_ids,
+                y=vec,
+                timesteps=t_vec,
+                guidance=guidance_vec,
+            )
+
+            taylor_seer_state['dY_prev'] = taylor_seer_state['dY_current']
+            taylor_seer_state['dY_current'] = approximate_derivative(pred, taylor_seer_state['dY_prev'], current_step, taylor_seer_state['last_non_approximated_step'])
+            taylor_seer_state['last_non_approximated_step'] = current_step
+        else:
+            finite_difference_window = current_step - taylor_seer_state['last_non_approximated_step']
+            pred = approximate_value(taylor_seer_state['dY_current'], finite_difference_window)
+
+        
         if img_input_ids is not None:
             pred = pred[:, : img.shape[1]]
 

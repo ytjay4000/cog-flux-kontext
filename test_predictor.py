@@ -19,29 +19,40 @@ def main():
     predictor.setup()
     t1 = time.time()
     print(f"Setup time: {t1 - t0} seconds")
-    
-    input_image_path = "guy.jpeg"  # Replace with your actual image path
 
-    # Test each aspect ratio
-    # for aspect_ratio in ASPECT_RATIOS.keys():
-    # for i in range(3):
-    for aspect_ratio in ["16:9", "1:1", "match_input_image"]:
+    model_runs = [
+        {"input_image": "car.jpg", "acceleration_level": "go fast", "prompt": "Change the car color to red, turn the headlights on"},
+        {"input_image": "car.jpg", "acceleration_level": "go really fast", "prompt": "Change the car color to red, turn the headlights on"},
+        {"input_image": "car.jpg", "acceleration_level": "none", "prompt": "Change the car color to red, turn the headlights on"},
+
+        {"input_image": "guy.jpeg", "acceleration_level": "go fast", "prompt": "make him into an oil painting, exactly preserving his likeness and facial features"},
+        {"input_image": "guy.jpeg", "acceleration_level": "go really fast", "prompt": "make him into an oil painting, exactly preserving his likeness and facial features"},
+        {"input_image": "guy.jpeg", "acceleration_level": "none", "prompt": "make him into an oil painting, exactly preserving his likeness and facial features"},
+
+        {"input_image": "lady.png", "acceleration_level": "go fast", "prompt": "change the text on her sweater to say 'sally sells sea shells by the sea shore'"},
+        {"input_image": "lady.png", "acceleration_level": "go really fast", "prompt": "change the text on her sweater to say 'sally sells sea shells by the sea shore'"},
+        {"input_image": "lady.png", "acceleration_level": "none", "prompt": "change the text on her sweater to say 'sally sells sea shells by the sea shore'"},
+    ]
+
+    for model_run in model_runs:
         result = predictor.predict(
-            prompt="make him an oil painting",
-            input_image=Path(input_image_path),
-            aspect_ratio="16:9",
-            num_inference_steps=30,
+            prompt=model_run["prompt"],
+            input_image="input_images/" + model_run["input_image"],
+            aspect_ratio="match_input_image",
+            num_inference_steps=28,
             guidance=3.5,
             seed=42,  # Using fixed seed for consistency
             output_format="png",
             output_quality=80,
             disable_safety_checker=False,
+            acceleration_level=model_run["acceleration_level"],
         )
         
-        # rename output file to include aspect ratio
-        output_file = result.name
-        output_file = output_file.replace(".png", f"_{aspect_ratio}.png")
+        input_image_name = model_run["input_image"].split(".")[0]
+        acceleration = model_run["acceleration_level"].replace(" ", "_")
+        output_file = f"output_images/{input_image_name}_{acceleration}.webp"
         result.rename(output_file)
+        print(f"Saved {output_file}")
 
 if __name__ == "__main__":
     main() 

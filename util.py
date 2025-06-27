@@ -70,3 +70,34 @@ def warm_up_model(h, w, model, device):
             y=vec,
             guidance=guidance_vec,
         )
+
+    
+def generate_compute_step_map(acceleration_level: str, num_inference_steps: int):
+    if acceleration_level == "none":
+        return [True] * num_inference_steps
+    elif acceleration_level == "go fast":
+        # compute first 4 steps, and last 4 steps, and all steps in between alternate between computing full and approximating
+        k = [False, True]
+        compute_step_map = [k[i % 2] for i in range(num_inference_steps)]
+        compute_step_map[:4] = [True] * 4
+        compute_step_map[-4:] = [True] * 4
+        return compute_step_map
+    elif acceleration_level == "go really fast":
+        # compute first 3 steps, and last 3 steps, and all steps in between alternate between computing full once and approximating twice
+        k = [False, True, False]
+        compute_step_map = [k[i % 3] for i in range(num_inference_steps)]
+        compute_step_map[:3] = [True] * 3
+        compute_step_map[-3:] = [True] * 3
+        return compute_step_map
+    
+    elif acceleration_level == "go really really fast":
+        # compute first 2 steps, and last 2 steps, and all steps in between alternate between computing full once and approximating twice
+        k = [False, True, False, False]
+        compute_step_map = [k[i % 3] for i in range(num_inference_steps)]
+        compute_step_map[:2] = [True] * 2
+        compute_step_map[-2:] = [True] * 2
+        return compute_step_map
+    
+    else:
+        raise ValueError(f"Invalid acceleration level: {acceleration_level}")
+

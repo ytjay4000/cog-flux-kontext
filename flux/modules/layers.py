@@ -7,6 +7,7 @@ from torch import Tensor, nn
 
 from flux.math import attention, rope
 
+from .float8_linear import F8Linear
 
 class EmbedND(nn.Module):
     def __init__(self, dim: int, theta: int, axes_dim: list[int]):
@@ -212,9 +213,9 @@ class SingleStreamBlock(nn.Module):
 
         self.mlp_hidden_dim = int(hidden_size * mlp_ratio)
         # qkv and mlp_in
-        self.linear1 = nn.Linear(hidden_size, hidden_size * 3 + self.mlp_hidden_dim)
+        self.linear1 = F8Linear(hidden_size, hidden_size * 3 + self.mlp_hidden_dim)
         # proj and mlp_out
-        self.linear2 = nn.Linear(hidden_size + self.mlp_hidden_dim, hidden_size)
+        self.linear2 = F8Linear(hidden_size + self.mlp_hidden_dim, hidden_size)
 
         self.norm = QKNorm(head_dim)
 
