@@ -1,7 +1,4 @@
-import torch
-import functools
 import math
-
         
 def approximate_derivative(Y, dY_prev, current_step, last_non_approximated_step):
     """

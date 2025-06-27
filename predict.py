@@ -74,7 +74,7 @@ class FluxDevKontextPredictor(BasePredictor):
             output_format="png",
             output_quality=100,
             disable_safety_checker=True,
-            acceleration_level="none",
+            go_fast=True,
         )
         print(f"Compiled in {time.time() - start_time} seconds")
         print("FluxDevKontextPredictor setup complete")
@@ -122,10 +122,9 @@ class FluxDevKontextPredictor(BasePredictor):
         disable_safety_checker: bool = Input(
             description="Disable NSFW safety checker", default=False
         ),
-        acceleration_level: str = Input(
-            description="Acceleration level, none means no acceleration, go really really fast is the fastest and likely to cause significant quality degradation",
-            choices=["none", "go fast", "go really fast", "go really really fast"],
-            default="none",
+        go_fast: bool = Input(
+            description="Make the model go fast, output quality may be slightly degraded for more difficult prompts",
+            default=True,
         ),
     ) -> Path:
         """
@@ -153,7 +152,10 @@ class FluxDevKontextPredictor(BasePredictor):
                 device=self.device,
             )
             
-            compute_step_map = generate_compute_step_map(acceleration_level, num_inference_steps)
+            if go_fast:
+                compute_step_map = generate_compute_step_map("go really fast", num_inference_steps)
+            else:
+                compute_step_map = generate_compute_step_map("none", num_inference_steps)
 
             # Remove the original conditioning image from memory to save space
             inp.pop("img_cond_orig", None)

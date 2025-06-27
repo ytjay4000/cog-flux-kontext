@@ -21,17 +21,14 @@ def main():
     print(f"Setup time: {t1 - t0} seconds")
 
     model_runs = [
-        {"input_image": "car.jpg", "acceleration_level": "go fast", "prompt": "Change the car color to red, turn the headlights on"},
-        {"input_image": "car.jpg", "acceleration_level": "go really fast", "prompt": "Change the car color to red, turn the headlights on"},
-        {"input_image": "car.jpg", "acceleration_level": "none", "prompt": "Change the car color to red, turn the headlights on"},
+        {"input_image": "car.jpg", "go_fast": True, "prompt": "Change the car color to red, turn the headlights on"},
+        {"input_image": "car.jpg", "go_fast": False, "prompt": "Change the car color to red, turn the headlights on"},
 
-        {"input_image": "guy.jpeg", "acceleration_level": "go fast", "prompt": "make him into an oil painting, exactly preserving his likeness and facial features"},
-        {"input_image": "guy.jpeg", "acceleration_level": "go really fast", "prompt": "make him into an oil painting, exactly preserving his likeness and facial features"},
-        {"input_image": "guy.jpeg", "acceleration_level": "none", "prompt": "make him into an oil painting, exactly preserving his likeness and facial features"},
+        {"input_image": "guy.jpeg", "go_fast": True, "prompt": "make him into an oil painting, exactly preserving his likeness and facial features"},
+        {"input_image": "guy.jpeg", "go_fast": False, "prompt": "make him into an oil painting, exactly preserving his likeness and facial features"},
 
-        {"input_image": "lady.png", "acceleration_level": "go fast", "prompt": "change the text on her sweater to say 'sally sells sea shells by the sea shore'"},
-        {"input_image": "lady.png", "acceleration_level": "go really fast", "prompt": "change the text on her sweater to say 'sally sells sea shells by the sea shore'"},
-        {"input_image": "lady.png", "acceleration_level": "none", "prompt": "change the text on her sweater to say 'sally sells sea shells by the sea shore'"},
+        {"input_image": "lady.png", "go_fast": True, "prompt": "change the text on her sweater to say 'sally sells sea shells by the sea shore'"},
+        {"input_image": "lady.png", "go_fast": False, "prompt": "change the text on her sweater to say 'sally sells sea shells by the sea shore'"},
     ]
 
     for model_run in model_runs:
@@ -45,12 +42,12 @@ def main():
             output_format="png",
             output_quality=80,
             disable_safety_checker=False,
-            acceleration_level=model_run["acceleration_level"],
+            go_fast=model_run["go_fast"],
         )
         
         input_image_name = model_run["input_image"].split(".")[0]
-        acceleration = model_run["acceleration_level"].replace(" ", "_")
-        output_file = f"output_images/{input_image_name}_{acceleration}.webp"
+        go_fast = model_run["go_fast"]
+        output_file = f"output_images/{input_image_name}_{go_fast}.webp"
         result.rename(output_file)
         print(f"Saved {output_file}")
 
