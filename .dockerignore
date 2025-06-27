@@ -1,5 +1,5 @@
 safety-cache/
 falcon-cache/
-*.jpg
-*.jpeg
-*.webp
+models/
+input_images/
+output_images/

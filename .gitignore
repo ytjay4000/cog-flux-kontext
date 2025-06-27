@@ -1,8 +1,10 @@
 **/__pycache__/
 .cog/
 .devcontainer/
-falcon-cache/
 safety-cache/
-*.png
-*.jpg
-*.jpeg
+falcon-cache/
+models/
+**/*.jpg
+**/*.jpeg
+**/*.webp
+**/*.png

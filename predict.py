@@ -14,11 +14,10 @@ from flux.model import Flux
 from flux.modules.autoencoder import AutoEncoder
 from safetensors.torch import load_file as load_sft
 from safety_checker import SafetyChecker
-from util import print_timing
+from util import print_timing, generate_compute_step_map
 from weights import download_weights
 
 from flux.util import ASPECT_RATIOS
-
 
 # Kontext model configuration
 KONTEXT_WEIGHTS_URL = "https://weights.replicate.delivery/default/black-forest-labs/kontext/release-candidate/kontext-dev.sft"
@@ -75,6 +74,7 @@ class FluxDevKontextPredictor(BasePredictor):
             output_format="png",
             output_quality=100,
             disable_safety_checker=True,
+            go_fast=True,
         )
         print(f"Compiled in {time.time() - start_time} seconds")
         print("FluxDevKontextPredictor setup complete")
@@ -99,7 +99,7 @@ class FluxDevKontextPredictor(BasePredictor):
         #     default="1",
         # ),
         num_inference_steps: int = Input(
-            description="Number of inference steps", default=30, ge=4, le=50
+            description="Number of inference steps", default=28, ge=4, le=50
         ),
         guidance: float = Input(
             description="Guidance scale for generation", default=2.5, ge=0.0, le=10.0
@@ -122,6 +122,10 @@ class FluxDevKontextPredictor(BasePredictor):
         disable_safety_checker: bool = Input(
             description="Disable NSFW safety checker", default=False
         ),
+        go_fast: bool = Input(
+            description="Make the model go fast, output quality may be slightly degraded for more difficult prompts",
+            default=True,
+        ),
     ) -> Path:
         """
         Generate an image based on the text prompt and conditioning image using FLUX.1 Kontext
@@ -135,19 +139,23 @@ class FluxDevKontextPredictor(BasePredictor):
                 target_width, target_height = ASPECT_RATIOS[aspect_ratio]
 
             # Prepare input for kontext sampling
-            with print_timing("prepare input"):
-                inp, final_height, final_width = prepare_kontext(
-                    t5=self.t5,
-                    clip=self.clip,
-                    prompt=prompt,
-                    ae=self.ae,
-                    img_cond_path=str(input_image),
-                    target_width=target_width,
-                    target_height=target_height,
-                    bs=1,
-                    seed=seed,
-                    device=self.device,
-                )
+            inp, final_height, final_width = prepare_kontext(
+                t5=self.t5,
+                clip=self.clip,
+                prompt=prompt,
+                ae=self.ae,
+                img_cond_path=str(input_image),
+                target_width=target_width,
+                target_height=target_height,
+                bs=1,
+                seed=seed,
+                device=self.device,
+            )
+            
+            if go_fast:
+                compute_step_map = generate_compute_step_map("go really fast", num_inference_steps)
+            else:
+                compute_step_map = generate_compute_step_map("none", num_inference_steps)
 
             # Remove the original conditioning image from memory to save space
             inp.pop("img_cond_orig", None)
@@ -160,30 +168,27 @@ class FluxDevKontextPredictor(BasePredictor):
             )
 
             # Generate image
-            with print_timing("denoise"):
-                x = denoise(self.model, **inp, timesteps=timesteps, guidance=guidance)
+            x = denoise(self.model, **inp, timesteps=timesteps, guidance=guidance, compute_step_map=compute_step_map)
 
             # Decode latents to pixel space
-            with print_timing("decode"):
-                x = unpack(x.float(), final_height, final_width)
-                with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16):
-                    x = self.ae.decode(x)
+            x = unpack(x.float(), final_height, final_width)
+            with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16):
+                x = self.ae.decode(x)
 
-            with print_timing("convert to image"):
-                x = x.clamp(-1, 1)
-                x = (x + 1) / 2
-                x = (x.permute(0, 2, 3, 1) * 255).to(torch.uint8).cpu().numpy()
-                image = Image.fromarray(x[0])
+            # Convert to image
+            x = x.clamp(-1, 1)
+            x = (x + 1) / 2
+            x = (x.permute(0, 2, 3, 1) * 255).to(torch.uint8).cpu().numpy()
+            image = Image.fromarray(x[0])
 
             # Apply safety checking
             if not disable_safety_checker:
-                with print_timing("Running safety checker"):
-                    images = self.safety_checker.filter_images([image])
-                    if not images:
-                        raise Exception(
-                            "Generated image contained NSFW content. Try running it again with a different prompt."
-                        )
-                    image = images[0]
+                images = self.safety_checker.filter_images([image])
+                if not images:
+                    raise Exception(
+                        "Generated image contained NSFW content. Try running it again with a different prompt."
+                    )
+                image = images[0]
 
             # Save image
             output_path = f"output.{output_format}"
