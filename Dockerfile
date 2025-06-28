@@ -58,8 +58,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run commands from cog.yaml (pget and patch)
+# Ensure the target directory exists before writing to it.
+# The torch package and its structure should exist from requirements.txt installation.
 RUN curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/download/v0.8.2/pget_linux_x86_64" && chmod +x /usr/local/bin/pget && \
-    wget -O `${PYENV_ROOT}/versions/${PYTHON_VERSION}/lib/python${PYTHON_VERSION}/site-packages/torch/_inductor/fx_passes/post_grad.py` https://gist.githubusercontent.com/alexarmbr/d3f11394d2cb79300d7cf2a0399c2605/raw/378fe432502da29f0f35204b8cd541d854153d23/patched_torch_post_grad.py
+    PYENV_PYTHON_PATH="${PYENV_ROOT}/versions/${PYTHON_VERSION}/lib/python${PYTHON_VERSION}/site-packages/torch/_inductor/fx_passes/post_grad.py" && \
+    echo "Target patch path: ${PYENV_PYTHON_PATH}" && \
+    mkdir -p "$(dirname "${PYENV_PYTHON_PATH}")" && \
+    wget -O "${PYENV_PYTHON_PATH}" https://gist.githubusercontent.com/alexarmbr/d3f11394d2cb79300d7cf2a0399c2605/raw/378fe432502da29f0f35204b8cd541d854153d23/patched_torch_post_grad.py
 
 # Expose port if necessary (RunPod serverless usually handles this)
 # EXPOSE 8000
