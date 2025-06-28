@@ -2,7 +2,9 @@ import os
 import time
 import torch
 from PIL import Image
-from cog import BasePredictor, Path, Input
+from cog import BasePredictor, Input  # Path removed
+import requests # Added
+import tempfile # Added
 
 from flux.sampling import denoise, get_schedule, prepare_kontext, unpack
 from flux.util import (
@@ -61,23 +63,64 @@ class FluxDevKontextPredictor(BasePredictor):
         self.model = torch.compile(self.model, dynamic=True)
 
         # Initialize safety checker
-        self.safety_checker = SafetyChecker()
+
+        # Compile the model
         print("Compiling model with torch.compile...")
         start_time = time.time()
-        self.predict(
-            prompt="Make the hair blue",
-            input_image=Path("lady.png"),
-            aspect_ratio="1:1",
-            num_inference_steps=30,
-            guidance=2.5,
-            seed=42,
-            output_format="png",
-            output_quality=100,
-            disable_safety_checker=True,
-            go_fast=True,
-        )
-        print(f"Compiled in {time.time() - start_time} seconds")
+        self.model = torch.compile(self.model, dynamic=True)
+        self._warmup_model() # Call after compilation
+
+        # Initialize safety checker
+        self.safety_checker = SafetyChecker()
+        print(f"Compilation and warmup finished in {time.time() - start_time} seconds")
         print("FluxDevKontextPredictor setup complete")
+
+    def _warmup_model(self):
+        """Dedicated warmup method to compile self.model by calling it directly."""
+        print("Starting model compilation with dummy inputs...")
+        try:
+            config_spec = configs["flux-dev"]
+            params = config_spec.params
+
+            bs = 1
+            # For 1MP image (1024x1024), effective latent dims H_eff=64, W_eff=64 (after AE stride 16)
+            # Sequence length for packed image latents: (64/2)*(64/2) = 1024
+            seq_len_img = (64 // 2) * (64 // 2)
+
+            dummy_img_latent_patches = torch.randn(bs, seq_len_img, params.in_channels, device=self.device, dtype=torch.bfloat16)
+            dummy_img_ids_positions = torch.randn(bs, seq_len_img, 3, device=self.device, dtype=torch.bfloat16)
+
+            seq_len_txt = self.t5.max_length # Typically 512 for T5-XXL
+            dummy_txt_embeddings = torch.randn(bs, seq_len_txt, params.context_in_dim, device=self.device, dtype=torch.bfloat16)
+            dummy_txt_ids_positions = torch.randn(bs, seq_len_txt, 3, device=self.device, dtype=torch.bfloat16)
+
+            dummy_clip_vector = torch.randn(bs, params.vec_in_dim, device=self.device, dtype=torch.bfloat16)
+            dummy_timesteps = torch.tensor([0.5], device=self.device, dtype=torch.bfloat16)
+            dummy_guidance_strength = torch.tensor([4.0], device=self.device, dtype=torch.bfloat16)
+
+            # For Kontext, conditioning image latents are concatenated
+            # Assume conditioning image has same latent dimensions for warmup
+            seq_len_img_cond = seq_len_img
+            dummy_img_cond_latent_patches = torch.randn(bs, seq_len_img_cond, params.in_channels, device=self.device, dtype=torch.bfloat16)
+            dummy_img_cond_ids_positions = torch.randn(bs, seq_len_img_cond, 3, device=self.device, dtype=torch.bfloat16)
+
+            final_dummy_img_input = torch.cat((dummy_img_latent_patches, dummy_img_cond_latent_patches), dim=1)
+            final_dummy_img_ids_input = torch.cat((dummy_img_ids_positions, dummy_img_cond_ids_positions), dim=1)
+
+            # Call the compiled model
+            _ = self.model(
+                img=final_dummy_img_input,
+                img_ids=final_dummy_img_ids_input,
+                txt=dummy_txt_embeddings,
+                txt_ids=dummy_txt_ids_positions,
+                y=dummy_clip_vector,
+                timesteps=dummy_timesteps,
+                guidance=dummy_guidance_strength,
+            )
+            print("Model compilation with dummy inputs successful.")
+        except Exception as e:
+            print(f"Error during model compilation with dummy inputs: {e}")
+            raise
 
 
     def predict(
@@ -85,10 +128,10 @@ class FluxDevKontextPredictor(BasePredictor):
         prompt: str = Input(
             description="Text description of what you want to generate, or the instruction on how to edit the given image.",
         ),
-        input_image: Path = Input(
-            description="Image to use as reference. Must be jpeg, png, gif, or webp.",
+        input_image: str = Input(
+            description="Image URL to use as reference. Must be jpeg, png, gif, or webp.",
         ),
-        aspect_ratio: str = Input(
+        aspect_ratio: str = Input
             description="Aspect ratio of the generated image. Use 'match_input_image' to match the aspect ratio of the input image.",
             choices=list(ASPECT_RATIOS.keys()),
             default="match_input_image",
@@ -138,19 +181,37 @@ class FluxDevKontextPredictor(BasePredictor):
             else:
                 target_width, target_height = ASPECT_RATIOS[aspect_ratio]
 
-            # Prepare input for kontext sampling
-            inp, final_height, final_width = prepare_kontext(
-                t5=self.t5,
-                clip=self.clip,
-                prompt=prompt,
-                ae=self.ae,
-                img_cond_path=str(input_image),
-                target_width=target_width,
-                target_height=target_height,
-                bs=1,
-                seed=seed,
-                device=self.device,
-            )
+            # Download image from URL and save to a temporary file
+            try:
+                response = requests.get(input_image, stream=True)
+                response.raise_for_status()  # Raise an exception for bad status codes
+
+                # Create a temporary file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        tmp_file.write(chunk)
+                    tmp_image_path = tmp_file.name
+            except requests.exceptions.RequestException as e:
+                raise Exception(f"Failed to download image from URL: {input_image}. Error: {e}")
+
+            try:
+                # Prepare input for kontext sampling
+                inp, final_height, final_width = prepare_kontext(
+                    t5=self.t5,
+                    clip=self.clip,
+                    prompt=prompt,
+                    ae=self.ae,
+                    img_cond_path=tmp_image_path, # Use downloaded image path
+                    target_width=target_width,
+                    target_height=target_height,
+                    bs=1,
+                    seed=seed,
+                    device=self.device,
+                )
+            finally:
+                # Clean up the temporary image file
+                if os.path.exists(tmp_image_path):
+                    os.remove(tmp_image_path)
             
             if go_fast:
                 compute_step_map = generate_compute_step_map("go really fast", num_inference_steps)
@@ -204,11 +265,12 @@ class FluxDevKontextPredictor(BasePredictor):
                 )
 
             # Return the output path
-            return Path(output_path)
+            return output_path # Return string path instead of Path object
 
 
 def download_model_weights():
     """Download all required model weights if they don't exist"""
+    from pathlib import Path # Import Path here for download_weights
     # Download kontext weights
     if not os.path.exists(KONTEXT_WEIGHTS_PATH):
         print("Kontext weights not found, downloading...")
