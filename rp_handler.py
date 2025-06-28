@@ -2,22 +2,48 @@ import runpod
 from predict import FluxDevKontextPredictor, download_model_weights
 import os
 import torch
+import traceback # Added for detailed error logging
 
-# Initialize predictor globally to reuse loaded models across calls
-# Ensure models are downloaded before Predictor initialization if setup expects them
-print("Downloading models for global predictor...")
-download_model_weights() # Explicitly download weights first
+# Global predictor variable
+predictor = None
 
-print("Initializing FluxDevKontextPredictor...")
-predictor = FluxDevKontextPredictor()
-predictor.setup() # Call setup once during initialization
-print("FluxDevKontextPredictor initialized.")
+try:
+    # Initialize predictor globally to reuse loaded models across calls
+    print("Global initialization started.")
+
+    # Ensure models are downloaded before Predictor initialization if setup expects them
+    print("Downloading models for global predictor...")
+    download_model_weights() # Explicitly download weights first
+    print("Model download process completed.")
+
+    print("Initializing FluxDevKontextPredictor...")
+    predictor_instance = FluxDevKontextPredictor()
+    print("FluxDevKontextPredictor instance created. Calling setup...")
+    predictor_instance.setup() # Call setup once during initialization
+    predictor = predictor_instance # Assign to global variable only after successful setup
+    print("FluxDevKontextPredictor initialized and setup complete.")
+
+except Exception as e:
+    print("!!! ERROR DURING GLOBAL INITIALIZATION !!!")
+    print(f"Exception type: {type(e)}")
+    print(f"Exception message: {e}")
+    print("Traceback:")
+    traceback.print_exc() # Prints full traceback to stdout/stderr
+    # predictor remains None, handler will fail if called, or we can raise to stop worker
+    raise # Re-raise to ensure worker fails clearly if init fails
 
 def handler(event):
     """
     RunPod Serverless Handler for FLUX.1 Kontext.
     """
     print("Received event:", event)
+
+    if predictor is None:
+        # This case should ideally not be reached if __main__ block doesn't catch
+        # the re-raised exception from global scope. But as a safeguard:
+        print("ERROR: Predictor not initialized. Global initialization likely failed.")
+        return {"error": "Predictor not initialized. Check worker startup logs."}
+
     job_input = event.get('input', {})
 
     # Extract parameters, providing defaults similar to Cog or sensible values
