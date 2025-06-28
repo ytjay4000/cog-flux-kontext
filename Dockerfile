@@ -51,8 +51,11 @@ WORKDIR /app
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 
-# Install Python packages
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python packages and verify runpod installation
+RUN pip install --no-cache-dir -r requirements.txt && \
+    echo "Verifying runpod installation..." && \
+    python -m pip show runpod && \
+    python -c "import runpod; print('Successfully imported runpod version:', runpod.__version__)"
 
 # Copy the rest of the application code
 COPY . .
@@ -69,5 +72,5 @@ RUN curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/d
 # Expose port if necessary (RunPod serverless usually handles this)
 # EXPOSE 8000
 
-# Command to run the application
-CMD ["python3", "-u", "rp_handler.py"]
+# Command to run the application using the specific pyenv Python
+CMD ["/root/.pyenv/versions/${PYTHON_VERSION}/bin/python3", "-u", "rp_handler.py"]
