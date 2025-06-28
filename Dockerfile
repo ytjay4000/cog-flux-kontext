@@ -29,10 +29,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pyenv and Python
-RUN curl https://pyenv.run | bash \
-    && ${PYENV_ROOT}/bin/pyenv install ${PYTHON_VERSION} \
-    && ${PYENV_ROOT}/bin/pyenv global ${PYTHON_VERSION} \
+# Install bash first (though usually present)
+RUN apt-get update && apt-get install -y bash && rm -rf /var/lib/apt/lists/*
+
+# Install pyenv
+RUN curl https://pyenv.run | bash
+
+# Add pyenv to PATH and set PYENV_SHELL
+ENV PATH="/root/.pyenv/bin:/root/.pyenv/shims:${PATH}" \
+    PYENV_SHELL=bash
+
+# Install Python using pyenv, set global version, and upgrade pip
+# This RUN command will use the updated PATH
+RUN pyenv install ${PYTHON_VERSION} \
+    && pyenv global ${PYTHON_VERSION} \
     && pip install --upgrade pip
 
 # Set working directory
